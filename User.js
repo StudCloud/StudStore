@@ -33,7 +33,17 @@ module.exports = function(_, db, bcrypt){
                         message: 'Invalid login or password'
                     });
                 } else {
-                    bcrypt.compare(loginData.password, user.hash, callback);
+                    bcrypt.compare(loginData.password, user.hash, function (err, result) {
+                        if(err) {
+                            callback(err);
+                        } else if(result){
+                            callback(null);
+                        } else {
+                            callback({
+                                message: 'Invalid login or password'
+                            });
+                        }
+                    });
                 }
             })
         },

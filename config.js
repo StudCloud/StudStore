@@ -1,56 +1,78 @@
-module.exports = function(_, User, Session){
+module.exports = function(_, validatorsConfig, User, Session){
     var config = {
         guest: {
-            login: function(session, data, callback){
-
+            f: function(session, data, callback){
+                callback(null, _.extend(data, {scope: 'guest'}));
             }
         },
         user: {
-
+            f: function(session, data, callback){
+                callback(null, _.extend(data, {scope: 'user'}));
+            }
         }
     };
 
-    return function(req, res){
-        var method = req.params.method;
-        Session.restore(req.cookies.sessionId, function(err, session){
+    return function(sessionId, method, data, callback){
+        Session.restore(sessionId, function(err, session){
+            function callMethod(session, justCreated){
+                config[session.userPriviledge][method](session, data, function(err, data){
+                    if(justCreated){
+                        if(err){
+                            err = _.extend(err, {newSessionId: session.id, hasError: true});
+                        } else {
+                            err = {newSessionId: session.id};
+                        }
+                    }
+                    callback(err, data);
+                })
+            }
+
+            function executeMethod(session, justCreated){
+                console.log(session);
+
+                if(_.isObject(config[session.userPriviledge]) && _.isFunction(config[session.userPriviledge][method])){
+                    if(_.isUndefined(validatorsConfig[session.userPriviledge][method])){
+                        callMethod(session, justCreated);
+                    } else if(_.isFunction(validatorsConfig[session.userPriviledge][method])){
+                        if(validatorsConfig[session.userPriviledge][method](data)){
+                            callMethod(session, justCreated);
+                        } else {
+                            callback({
+                                message: 'Invalid data'
+                            });
+                        }
+                    } else {
+                        validatorsConfig[session.userPriviledge][method](data, function(err){
+                            if(err){
+                                callback({
+                                    message: 'Invalid data'
+                                });
+                            } else {
+                                callMethod(session, justCreated);
+                            }
+                        });
+                    }
+
+
+                } else {
+                    callback({
+                        message: "Action not permitted"
+                    });
+                }
+            }
+
             if(err) {
                 Session.create(function(err, session){
                     if(err){
-                        res.end('{"err": {"message": "Internal server error"}}');
+                        callback({
+                            message: "Internal server error"
+                        });
                     } else {
-                        res.cookie('sessionId', session.id);
-
-                        if(_.isObject(config[session.userPriviledge]) && _.isFunction(config[session.userPriviledge][method])){
-                            config[session.userPriviledge][method](session, req.body, function(err, data){
-                                try {
-                                    res.end(JSON.stringify({
-                                        err: err,
-                                        data: data
-                                    }));
-                                } catch(e) {
-                                    res.end('{"err": {"message": "Internal server error"}}');
-                                }
-                            })
-                        } else {
-                            res.end('{"err": {"message": "Action not permitted"}}');
-                        }
+                        executeMethod(session, true);
                     }
                 })
             } else {
-                if(_.isObject(config[session.userPriviledge]) && _.isFunction(config[session.userPriviledge][method])){
-                    config[session.userPriviledge][method](session, req.body, function(err, data){
-                        try {
-                            res.end(JSON.stringify({
-                                err: err,
-                                data: data
-                            }));
-                        } catch(e) {
-                            res.end('{"err": {"message": "Internal server error"}}');
-                        }
-                    })
-                } else {
-                    res.end('{"err": {"message": "Action not permitted"}}');
-                }
+                executeMethod(session);
             }
         });
     }

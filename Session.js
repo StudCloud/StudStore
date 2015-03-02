@@ -49,7 +49,7 @@ module.exports = function (_, db) {
             })
         },
         setPriviledge: function(selector, newPriviledge, callback){
-            db.sessions.updateOne(selector, {
+            db.sessions.update(selector, {
                 $set: {
                     userPriviledge: newPriviledge
                 }
